@@ -1,0 +1,1 @@
+# Class để gọi API bảo mật (GoPlus, Chainalysis...)

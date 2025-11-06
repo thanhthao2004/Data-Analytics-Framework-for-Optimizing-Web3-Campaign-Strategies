@@ -1,0 +1,1 @@
+# Tích hợp 3 trụ cột, thực hiện logic "trade-off"

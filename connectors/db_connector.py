@@ -1,0 +1,1 @@
+# Class để kết nối và truy vấn (BigQuery, ClickHouse, etc.)
