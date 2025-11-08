@@ -31,7 +31,7 @@ def main():
 
     # 1. Khởi tạo các Connectors
     db_conn = BigQueryConnector()
-    api_client = SecurityAPIClient()
+    api_client = ContractRiskAnalyzer().etherscan
     
     # Kiểm tra kết nối
     if not db_conn.client:

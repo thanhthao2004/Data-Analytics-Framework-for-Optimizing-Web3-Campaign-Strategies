@@ -14,15 +14,8 @@ class Config:
     """
     
     # === CẤU HÌNH KẾT NỐI ===
+    ETHERSCAN_API_KEY = os.environ.get("ETHERSCAN_API_KEY")
     
-    # Khóa API cho dịch vụ bảo mật (ví dụ: GoPlus, Blowfish)
-    # [Pillar 1] Cần thiết để lấy điểm rủi ro nội bộ
-    SECURITY_API_KEY = os.environ.get("SECURITY_API_KEY")
-    SECURITY_API_BASE_URL = "https://api.gopluslabs.io/api/v1" # Ví dụ
-    
-    # Đường dẫn đến tệp JSON credentials cho Google BigQuery
-    # [Pillar 1, 2, 3] Cần thiết để truy cập kho dữ liệu on-chain
-    # (ví dụ: bigquery-public-data.crypto_ethereum)
     GOOGLE_APPLICATION_CREDENTIALS = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS_PATH")
     
     # === CẤU HÌNH CHIẾN DỊCH ===

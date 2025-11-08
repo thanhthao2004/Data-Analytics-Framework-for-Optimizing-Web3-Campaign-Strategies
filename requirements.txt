@@ -1,22 +1,28 @@
+# requirements.txt (Phần được cập nhật)
+
 # --- Data Core & Handling ---
-pandas            # Cần thiết cho mọi xử lý dữ liệu, đặc biệt là Phân tích Cohort (Pillar 3)  và dữ liệu chuỗi thời gian (Pillar 2) 
-numpy             # Thư viện nền tảng cho tính toán số, cần thiết cho mô hình ML và phân tích
+pandas
+numpy
 
 # --- Pillar 1: Contract Risk Model ---
-networkx          # Cần thiết để xây dựng và phân tích "đồ thị phụ thuộc" (dependency graph)  được mô tả trong Hình 1 [cite: 54-56]
+networkx
+slither-analyzer  # <--- THÊM VÀO: Công cụ phân tích tĩnh open-source
+etherscan-python  # <--- THÊM VÀO: Để lấy mã nguồn đã xác thực
 
 # --- Pillar 2: Gas Cost Model ---
-statsmodels       # Để triển khai các mô hình chuỗi thời gian truyền thống như ARIMA 
-tensorflow        # Hoặc 'torch', để triển khai các mô hình deep learning như LSTM hoặc GRU 
-keras             # Thường dùng chung với Tensorflow để xây dựng mô hình LSTM/GRU
-scikit-learn      # Hữu ích cho việc tiền xử lý dữ liệu (scaling) trước khi đưa vào mô hình dự báo
+statsmodels
+tensorflow
+keras
+scikit-learn
 
 # --- Pillar 3: User Behavior Model ---
-networkx          # Cần thiết cho "phân tích dựa trên đồ thị" (graph-based analysis) để phát hiện cụm Sybil [cite: 80, 81, 85]
-scikit-learn      # Để triển khai các thuật toán "clustering" (phân cụm) [cite: 78, 85] nhằm phát hiện Sybil
+# (networkx, scikit-learn đã có)
 
-# --- Data Acquisition & Utilities (Implied) ---
-web3              # Mặc dù không được nêu tên, đây là thư viện tiêu chuẩn để "Data Acquisition"  (thu thập dữ liệu) on-chain từ các node Ethereum
-requests          # Thường cần thiết để gọi các API on-chain hoặc các công cụ phân tích bên ngoài
-matplotlib        # Cần thiết để "trực quan hóa các đánh đổi phức tạp" (visualize complex trade-offs) 
-seaborn           # Một thư viện khác để trực quan hóa, hỗ trợ cho dashboard
+# --- Data Acquisition & Utilities ---
+web3
+requests
+matplotlib
+seaborn
+python-dotenv     # <--- THÊM VÀO: Cần cho config
+google-cloud-bigquery
+google-auth
