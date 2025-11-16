@@ -22,7 +22,7 @@ class Config:
     
     # Địa chỉ hợp đồng mục tiêu mà chiến dịch sẽ tương tác
     # [Pillar 1] Đây là đối tượng phân tích rủi ro chính
-    TARGET_CONTRACT_ADDRESS = "0xExampleContractAddress..."
+    TARGET_CONTRACT_ADDRESS = "0xB8c77482e45F1F44dE1745F52C74426C631bDD52"
     
     # Danh sách các ví tiềm năng để phân tích Sybil (nếu có)
     # [Pillar 3] Dùng cho phân tích chủ động (proactive)
@@ -30,4 +30,4 @@ class Config:
     
     # Ngày bắt đầu chiến dịch (dùng cho phân tích cohort)
     # [Pillar 3]
-    CAMPAIGN_START_DATE = "2025-11-16"
+    CAMPAIGN_START_DATE = "2025-6-23"

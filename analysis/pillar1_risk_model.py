@@ -1,4 +1,4 @@
-# analysis/pillar1_risk_model.py (ĐƯỢC HOÀN THIỆN THEO SƠ ĐỒ)
+# analysis/pillar1_risk_model.py
 import networkx as nx
 import subprocess
 import json
@@ -33,8 +33,8 @@ class ContractRiskAnalyzer:
         """
         print("[Pillar 1] Đang tải danh sách hợp đồng đã kiểm toán...")
         return {
-            "0x7a250d5630b4cf539739df2c5dacb4c659f2488d".lower(), # Uniswap V2 Router
-            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".lower()  # USDC
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".lower(), # USDC 
+            "0xdac17f958d2ee523a2206206994597c13d831ec7".lower()  # Tether (USDT)
         }
 
     def _get_internal_risk(self, contract_address: str) -> dict:
@@ -84,6 +84,11 @@ class ContractRiskAnalyzer:
                 print(f" [Pillar 1-OS] Slither thất bại. Lỗi:\n{process.stderr}")
                 return {"score": 50, "issues_found": ["Slither execution failed", process.stderr[:200]]}
 
+            # Xử lý trường hợp Slither không tìm thấy file json nhưng vẫn thoát code 0
+            if not os.path.exists(json_output_file):
+                print(f" [Pillar 1-OS] Slither chạy nhưng không tạo file JSON. Output:\n{process.stdout}")
+                return {"score": 50, "issues_found": ["Slither JSON output not found"]}
+
             with open(json_output_file, 'r') as f:
                 results = json.load(f)
 
@@ -116,8 +121,7 @@ class ContractRiskAnalyzer:
         G = nx.DiGraph()
         G.add_node(contract_address, audited=(contract_address in self.known_audited_contracts))
         
-        # Truy vấn BigQuery để tìm các lệnh DELEGATECALL hoặc CALL
-        # (Đây là truy vấn ví dụ, có thể cần tinh chỉnh)
+        # *** THAY ĐỔI QUAN TRỌNG: Thêm bộ lọc 90 ngày để tránh quét toàn bộ bảng ***
         query = f"""
             SELECT 
                 to_address
@@ -125,13 +129,15 @@ class ContractRiskAnalyzer:
             WHERE from_address = '{contract_address.lower()}'
               AND (call_type = 'delegatecall' OR call_type = 'call')
               AND to_address != '{contract_address.lower()}'
+              -- TỐI ƯU HÓA CHI PHÍ BIGQUERY: Chỉ quét 90 ngày gần nhất
+              AND DATE(block_timestamp) >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
             GROUP BY 1
             LIMIT 30 -- Giới hạn để tránh quá tải
         """
         try:
             df = self.db.query_to_dataframe(query)
             if df.empty:
-                print("[Pillar 1] Không tìm thấy phụ thuộc (traces) nào.")
+                print("[Pillar 1] Không tìm thấy phụ thuộc (traces) nào trong 90 ngày gần nhất.")
                 return G
             
             for _, row in df.iterrows():

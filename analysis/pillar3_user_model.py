@@ -1,9 +1,9 @@
-# analysis/pillar3_user_model.py (KHỚP VỚI SƠ ĐỒ)
+# analysis/pillar3_user_model.py
 import pandas as pd
 from connectors.db_connector import BigQueryConnector
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
-from core.config import Config # Thêm import Config
+from core.config import Config
 
 class UserBehaviorAnalyzer:
     """
@@ -18,13 +18,16 @@ class UserBehaviorAnalyzer:
         Lấy các đặc điểm (features) từ BigQuery để phân cụm Sybil.
         Khớp với luồng: _get_sybil_features() -> BigQuery SQL
         """
+        # *** THAY ĐỔI QUAN TRỌNG: Thêm check nếu list rỗng thì không chạy ***
+        if not wallet_list:
+            print("[Pillar 3] Danh sách ví rỗng. Bỏ qua phân tích Sybil.")
+            return pd.DataFrame()
+            
         print(f"[Pillar 3] Đang lấy đặc điểm Sybil cho {len(wallet_list)} ví...")
         
         wallet_list_str = "('" + "','".join([w.lower() for w in wallet_list]) + "')"
 
-        # Truy vấn này logic tương đương với sơ đồ:
-        # Lấy funding_source (from_address của tx đầu tiên)
-        # Lấy creation_timestamp (timestamp của tx đầu tiên)
+        # *** THAY ĐỔI QUAN TRỌNG: Thêm bộ lọc 365 ngày để tránh quét toàn bộ bảng ***
         query = f"""
             WITH ranked_tx AS (
                 SELECT 
@@ -34,6 +37,8 @@ class UserBehaviorAnalyzer:
                     ROW_NUMBER() OVER(PARTITION BY to_address ORDER BY block_timestamp ASC) as rn
                 FROM `bigquery-public-data.crypto_ethereum.transactions`
                 WHERE to_address IN {wallet_list_str}
+                -- TỐI ƯU HÓA CHI PHÍ: Giả định ví phân tích được tạo trong 365 ngày
+                AND DATE(block_timestamp) >= DATE_SUB(CURRENT_DATE(), INTERVAL 365 DAY)
             )
             SELECT 
                 to_address AS wallet,
@@ -44,7 +49,7 @@ class UserBehaviorAnalyzer:
         """
         features_df = self.db.query_to_dataframe(query)
         if features_df.empty:
-            print("ℹ[Pillar 3] Không tìm thấy dữ liệu giao dịch cho các ví này.")
+            print("ℹ[Pillar 3] Không tìm thấy dữ liệu giao dịch cho các ví này (trong 365 ngày).")
             return pd.DataFrame()
             
         # Khớp với luồng: Encode funding_source -> funding_source_id
@@ -89,7 +94,10 @@ class UserBehaviorAnalyzer:
         """
         print(f"[Pillar 3] Đang chạy Phân tích Cohort (sau ngày {campaign_start_date})...")
         
-        # Truy vấn này khớp hoàn toàn với logic trong sơ đồ
+        # *** THAY ĐỔI QUAN TRỌNG: Sửa lỗi logic và tối ưu hóa truy vấn ***
+        # Lỗi gốc: Dùng MIN() trong WHERE
+        # Tối ưu hóa: Thêm bộ lọc DATE(block_timestamp) ở cả 2 CTE
+        
         query = f"""
             WITH 
             acquisition AS (
@@ -98,16 +106,18 @@ class UserBehaviorAnalyzer:
                     MIN(DATE(block_timestamp)) AS acquisition_date
                 FROM `bigquery-public-data.crypto_ethereum.transactions`
                 WHERE to_address = '{Config.TARGET_CONTRACT_ADDRESS.lower()}'
-                  AND MIN(DATE(block_timestamp)) >= '{campaign_start_date}'
+                  -- TỐI ƯU HÓA: Chỉ quét các partition sau ngày bắt đầu
+                  AND DATE(block_timestamp) >= '{campaign_start_date}'
                 GROUP BY 1
             ),
             activity AS (
                 SELECT 
                     DISTINCT from_address AS user,
-                    MIN(DATE(block_timestamp)) AS activity_date
+                    DATE(block_timestamp) AS activity_date
                 FROM `bigquery-public-data.crypto_ethereum.transactions`
                 WHERE from_address IN (SELECT user FROM acquisition)
-                  AND MIN(DATE(block_timestamp)) >= '{campaign_start_date}'
+                  -- TỐI ƯU HÓA: Chỉ quét các partition sau ngày bắt đầu
+                  AND DATE(block_timestamp) >= '{campaign_start_date}'
             ),
             cohort_data AS (
                 SELECT
