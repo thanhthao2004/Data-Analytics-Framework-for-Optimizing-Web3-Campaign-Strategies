@@ -1,16 +1,14 @@
-# analysis/pillar3_user_model.py
-# Pillar 3: User Behavior
+# analysis/pillar3_user_model.py (KHỚP VỚI SƠ ĐỒ)
 import pandas as pd
 from connectors.db_connector import BigQueryConnector
 from sklearn.cluster import DBSCAN
 from sklearn.preprocessing import StandardScaler
+from core.config import Config # Thêm import Config
 
 class UserBehaviorAnalyzer:
     """
     Triển khai Trụ cột 3: Phân tích Hành vi Người dùng.
-    Bao gồm 2 phần:
-    1. Sybil Detection (via Clustering) [cite: 234, 235]
-    2. User Retention (via Cohort Analysis) [cite: 234, 244]
+    Khớp với sơ đồ Mermaid P3.
     """
     def __init__(self, db: BigQueryConnector):
         self.db = db
@@ -18,14 +16,15 @@ class UserBehaviorAnalyzer:
     def _get_sybil_features(self, wallet_list: list) -> pd.DataFrame:
         """
         Lấy các đặc điểm (features) từ BigQuery để phân cụm Sybil.
-        Các đặc điểm ví dụ: Nguồn tài trợ, Thời gian tạo 
+        Khớp với luồng: _get_sybil_features() -> BigQuery SQL
         """
         print(f"[Pillar 3] Đang lấy đặc điểm Sybil cho {len(wallet_list)} ví...")
         
-        # Chuyển danh sách ví thành chuỗi SQL
         wallet_list_str = "('" + "','".join([w.lower() for w in wallet_list]) + "')"
 
-        # Truy vấn này lấy: ví, tx đầu tiên (nguồn), timestamp đầu tiên
+        # Truy vấn này logic tương đương với sơ đồ:
+        # Lấy funding_source (from_address của tx đầu tiên)
+        # Lấy creation_timestamp (timestamp của tx đầu tiên)
         query = f"""
             WITH ranked_tx AS (
                 SELECT 
@@ -48,40 +47,33 @@ class UserBehaviorAnalyzer:
             print("ℹ[Pillar 3] Không tìm thấy dữ liệu giao dịch cho các ví này.")
             return pd.DataFrame()
             
-        # Chuẩn bị dữ liệu cho clustering
-        # Mã hóa 'funding_source' thành số
+        # Khớp với luồng: Encode funding_source -> funding_source_id
         features_df['funding_source_id'] = features_df['funding_source'].astype('category').cat.codes
         
         return features_df
 
     def detect_sybil_clusters(self, wallet_list: list) -> dict:
         """
-        Chạy thuật toán phân cụm (DBSCAN)  để tìm các cụm Sybil.
-        Các cụm là các ví có cùng nguồn vốn và thời điểm tạo.
+        Chạy thuật toán phân cụm (DBSCAN) để tìm các cụm Sybil.
+        Khớp với luồng: StandardScaler -> DBSCAN
         """
         features_df = self._get_sybil_features(wallet_list)
         if features_df.empty:
             return {"total_clusters": 0, "clusters": {}}
 
-        # Chọn các đặc điểm để phân cụm
-        #  (Funding Source, Timing)
         X = features_df[['funding_source_id', 'creation_timestamp']]
         
-        # Chuẩn hóa dữ liệu
+        # Khớp với luồng: StandardScaler().fit_transform()
         scaler = StandardScaler()
         X_scaled = scaler.fit_transform(X)
         
-        # Chạy DBSCAN
-        # eps=0.5: Khoảng cách tối đa giữa 2 mẫu
-        # min_samples=3: Tối thiểu 3 ví để tạo thành 1 cụm
+        # Khớp với luồng: DBSCAN(eps=0.5, min_samples=3)
         dbscan = DBSCAN(eps=0.5, min_samples=3)
         clusters = dbscan.fit_predict(X_scaled)
         
         features_df['cluster'] = clusters
         
-        # Lọc ra các cụm (bỏ cluster = -1, là nhiễu)
         sybil_df = features_df[features_df['cluster'] != -1]
-        
         cluster_groups = sybil_df.groupby('cluster')['wallet'].apply(list).to_dict()
         
         print(f"[Pillar 3] Phát hiện {len(cluster_groups)} cụm Sybil.")
@@ -93,32 +85,29 @@ class UserBehaviorAnalyzer:
     def run_cohort_analysis(self, campaign_start_date: str) -> pd.DataFrame:
         """
         Thực hiện Phân tích Cohort.
-        Nhóm người dùng theo ngày tham gia và theo dõi hoạt động 
-        sau Ngày 1, 7, 30.
+        Khớp với luồng: run_cohort_analysis() -> BigQuery SQL (Cohort)
         """
         print(f"[Pillar 3] Đang chạy Phân tích Cohort (sau ngày {campaign_start_date})...")
         
-        # Đây là một truy vấn SQL phức tạp để tạo ma trận cohort
+        # Truy vấn này khớp hoàn toàn với logic trong sơ đồ
         query = f"""
             WITH 
             acquisition AS (
-                -- Lấy ngày đầu tiên mỗi user tham gia (ví dụ: claim airdrop)
                 SELECT 
                     from_address AS user,
-                    DATE(block_timestamp) AS acquisition_date
+                    MIN(DATE(block_timestamp)) AS acquisition_date
                 FROM `bigquery-public-data.crypto_ethereum.transactions`
-                WHERE to_address = '{Config.TARGET_CONTRACT_ADDRESS.lower()}' -- Tương tác với hợp đồng
-                  AND DATE(block_timestamp) >= '{campaign_start_date}'
+                WHERE to_address = '{Config.TARGET_CONTRACT_ADDRESS.lower()}'
+                  AND MIN(DATE(block_timestamp)) >= '{campaign_start_date}'
                 GROUP BY 1
             ),
             activity AS (
-                -- Lấy tất cả hoạt động sau đó của các user đó
                 SELECT 
                     DISTINCT from_address AS user,
-                    DATE(block_timestamp) AS activity_date
+                    MIN(DATE(block_timestamp)) AS activity_date
                 FROM `bigquery-public-data.crypto_ethereum.transactions`
                 WHERE from_address IN (SELECT user FROM acquisition)
-                  AND DATE(block_timestamp) >= '{campaign_start_date}'
+                  AND MIN(DATE(block_timestamp)) >= '{campaign_start_date}'
             ),
             cohort_data AS (
                 SELECT
@@ -128,7 +117,6 @@ class UserBehaviorAnalyzer:
                 FROM activity a
                 JOIN acquisition ac ON a.user = ac.user
             )
-            -- Tạo ma trận giữ chân
             SELECT
                 acquisition_date,
                 COUNT(DISTINCT user) AS cohort_size,

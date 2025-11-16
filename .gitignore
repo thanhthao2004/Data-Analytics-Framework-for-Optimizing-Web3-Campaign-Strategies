@@ -1,0 +1,3 @@
+# Environment files (except .env.example)
+.env.*
+google-credentials.json

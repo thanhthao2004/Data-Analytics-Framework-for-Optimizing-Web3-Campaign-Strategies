@@ -30,4 +30,4 @@ class Config:
     
     # Ngày bắt đầu chiến dịch (dùng cho phân tích cohort)
     # [Pillar 3]
-    CAMPAIGN_START_DATE = "2025-10-01"
+    CAMPAIGN_START_DATE = "2025-11-16"

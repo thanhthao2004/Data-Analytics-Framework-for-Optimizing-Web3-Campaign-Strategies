@@ -1,9 +1,9 @@
 # run_analysis.py
-# Script chính để chạy toàn bộ phân tích
+# Script chính để chạy toàn bộ phân tích (ĐÃ SỬA LỖI)
 import pandas as pd
 from core.config import Config
 from connectors.db_connector import BigQueryConnector
-from connectors.security_api_client import SecurityAPIClient
+# import connectors.security_api_client (ĐÃ XÓA - Không cần thiết)
 from analysis.pillar1_risk_model import ContractRiskAnalyzer
 from analysis.pillar2_gas_model import GasCostForecaster
 from analysis.pillar3_user_model import UserBehaviorAnalyzer
@@ -13,9 +13,9 @@ def load_wallet_list(path: str) -> list:
     """Tiện ích tải danh sách ví từ CSV."""
     try:
         df = pd.read_csv(path)
-        # Giả sử cột chứa ví có tên là 'wallet_address'
         if 'wallet_address' in df.columns:
             return df['wallet_address'].tolist()
+        print(f" Không tìm thấy cột 'wallet_address' trong {path}")
         return []
     except FileNotFoundError:
         print(f" Không tìm thấy tệp danh sách ví tại: {path}")
@@ -31,21 +31,20 @@ def main():
 
     # 1. Khởi tạo các Connectors
     db_conn = BigQueryConnector()
-    api_client = ContractRiskAnalyzer().etherscan
     
-    # Kiểm tra kết nối
+    # (ĐÃ XÓA dòng 'api_client = ...' vì P1 tự xử lý)
+    
     if not db_conn.client:
         print(" Hủy bỏ: Không thể kết nối tới BigQuery. Vui lòng kiểm tra credentials.")
         return
 
     # 2. Khởi tạo các Trụ cột (Pillars)
-    # Các trụ cột nhận connectors làm tham số (Dependency Injection)
-    risk_analyzer = ContractRiskAnalyzer(db=db_conn, api=api_client)
+    # (SỬA LỖI: Xóa 'api=api_client' khỏi ContractRiskAnalyzer)
+    risk_analyzer = ContractRiskAnalyzer(db=db_conn)
     gas_forecaster = GasCostForecaster(db=db_conn)
     user_analyzer = UserBehaviorAnalyzer(db=db_conn)
 
     # 3. Khởi tạo Dịch vụ Tích hợp (Analysis Service)
-    # Service nhận các trụ cột làm tham số
     analysis_service = AnalysisService(
         risk_analyzer=risk_analyzer,
         gas_forecaster=gas_forecaster,
@@ -71,8 +70,3 @@ def main():
     print(" Phân tích hoàn tất.")
     print("=======================================================")
 
-
-if __name__ == "__main__":
-    # Để chạy, hãy đảm bảo bạn đã tạo file .env
-    # và cài đặt các thư viện trong requirements.txt
-    main()

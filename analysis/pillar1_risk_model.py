@@ -1,36 +1,46 @@
-# analysis/pillar1_risk_model.py (ĐƯỢC THIẾT KẾ LẠI)
-# Pillar 1: Contract Risk
+# analysis/pillar1_risk_model.py (ĐƯỢC HOÀN THIỆN THEO SƠ ĐỒ)
 import networkx as nx
-import subprocess  # <--- THÊM VÀO
-import json        # <--- THÊM VÀO
-import os          # <--- THÊM VÀO
-import tempfile    # <--- THÊM VÀO
-import shutil      # <--- THÊM VÀO
-from etherscan import Etherscan # <--- THÊM VÀO
+import subprocess
+import json
+import os
+import tempfile
+import shutil
+from etherscan.client import Etherscan
 from core.config import Config
 from connectors.db_connector import BigQueryConnector
-# (Chúng ta không import SecurityAPIClient nữa)
+import pandas as pd
 
 class ContractRiskAnalyzer:
     """
     Triển khai Trụ cột 1 (Open-Source).
     Sử dụng Slither (Phân tích nội bộ) và BigQuery/NetworkX (Phân tích phụ thuộc).
+    Khớp với sơ đồ Mermaid P1.
     """
     def __init__(self, db: BigQueryConnector):
         self.db = db
         # Khởi tạo API Etherscan để lấy mã nguồn
-        self.etherscan = Etherscan(Config.ETHERSCAN_API_KEY)
+        self.etherscan = Etherscan(
+            api_key=Config.ETHERSCAN_API_KEY, 
+            network="mainnet"
+        )
         self.known_audited_contracts = self._load_known_audits()
+        print("[Pillar 1] Đã khởi tạo ContractRiskAnalyzer.")
+
+    def _load_known_audits(self) -> set:
+        """
+        Tải danh sách các hợp đồng đã được kiểm toán (audited) đã biết.
+        (Đây là hàm giả lập, bạn có thể thay thế bằng việc đọc từ file CSV/JSON)
+        """
+        print("[Pillar 1] Đang tải danh sách hợp đồng đã kiểm toán...")
+        return {
+            "0x7a250d5630b4cf539739df2c5dacb4c659f2488d".lower(), # Uniswap V2 Router
+            "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48".lower()  # USDC
+        }
 
     def _get_internal_risk(self, contract_address: str) -> dict:
         """
         Thực hiện Model 1: Traditional Security Analysis bằng Slither (Open-Source).
-        Quy trình:
-        1. Lấy mã nguồn từ Etherscan.
-        2. Lưu vào thư mục tạm.
-        3. Chạy Slither trên thư mục đó.
-        4. Đọc và phân tích kết quả JSON.
-        5. Dọn dẹp thư mục tạm.
+        Khớp với luồng: get_verified_source -> Run Slither -> Parse slither_results.json
         """
         print(f"[Pillar 1-OS] Đang lấy mã nguồn cho {contract_address}...")
         try:
@@ -39,25 +49,22 @@ class ContractRiskAnalyzer:
                 print(f"[Pillar 1-OS] Không tìm thấy mã nguồn đã xác thực.")
                 return {"score": 50, "issues_found": ["No verified source code"]}
             
-            # Etherscan trả về một chuỗi JSON hoặc mã nguồn
             source_code = source_data[0]['SourceCode']
             contract_name = source_data[0]['ContractName']
 
-            # Xử lý mã nguồn (thường là một chuỗi JSON chứa nhiều tệp)
-            if source_code.startswith('{{'): # Định dạng JSON của Etherscan
+            if source_code.startswith('{{'):
                  source_code_json = json.loads(source_code[1:-1])
                  files_to_write = source_code_json.get('sources', {})
-            elif source_code.startswith('{'): # Định dạng JSON cũ hơn
+            elif source_code.startswith('{'):
                  source_code_json = json.loads(source_code)
                  files_to_write = source_code_json
-            else: # Mã nguồn đơn
+            else:
                  files_to_write = {f"{contract_name}.sol": {"content": source_code}}
 
         except Exception as e:
             print(f" [Pillar 1-OS] Lỗi khi lấy/xử lý mã nguồn Etherscan: {e}")
             return {"score": 50, "issues_found": [f"Source fetch error: {e}"]}
 
-        # 2. Lưu vào thư mục tạm
         temp_dir = tempfile.mkdtemp()
         print(f" [Pillar 1-OS] Đã tạo thư mục tạm: {temp_dir}")
         try:
@@ -67,23 +74,16 @@ class ContractRiskAnalyzer:
                 with open(file_path, 'w') as f:
                     f.write(data['content'])
 
-            # 3. Chạy Slither trên thư mục đó
             json_output_file = os.path.join(temp_dir, 'slither_results.json')
             print(f" [Pillar 1-OS] Đang chạy Slither...")
             
-            # Chạy Slither qua subprocess, trỏ vào thư mục tạm
-            # --json: Xuất kết quả ra file JSON
             command = ['slither', temp_dir, '--json', json_output_file]
-            
-            # Ẩn output thông thường, chỉ báo lỗi nếu có
             process = subprocess.run(command, capture_output=True, text=True, timeout=120)
 
             if process.returncode != 0 and not os.path.exists(json_output_file):
-                 # Nếu Slither thất bại VÀ không tạo ra file JSON
                 print(f" [Pillar 1-OS] Slither thất bại. Lỗi:\n{process.stderr}")
                 return {"score": 50, "issues_found": ["Slither execution failed", process.stderr[:200]]}
 
-            # 4. Đọc và phân tích kết quả JSON
             with open(json_output_file, 'r') as f:
                 results = json.load(f)
 
@@ -91,8 +91,7 @@ class ContractRiskAnalyzer:
                 issues = results['results'].get('detectors', [])
                 print(f" [Pillar 1-OS] Slither hoàn tất. Phát hiện {len(issues)} vấn đề.")
                 
-                # Tính điểm đơn giản: 100 - (số vấn đề * 5)
-                # (Bạn có thể tinh chỉnh logic này dựa trên 'impact' (mức độ ảnh hưởng))
+                # Tính điểm theo sơ đồ: 100 - (số vấn đề * 5)
                 score = max(0, 100 - (len(issues) * 5)) 
                 return {"score": score, "issues_found": [i['description'] for i in issues]}
             else:
@@ -104,37 +103,111 @@ class ContractRiskAnalyzer:
             return {"score": 50, "issues_found": [f"Slither runtime error: {e}"]}
         
         finally:
-            # 5. Dọn dẹp thư mục tạm
             if os.path.exists(temp_dir):
                 shutil.rmtree(temp_dir)
                 print(f" [Pillar 1-OS] Đã dọn dẹp thư mục tạm.")
 
-    # ... (Các hàm _get_dependency_graph, _analyze_hidden_risks, _load_known_audits vẫn giữ nguyên) ...
-    # ...
-    
+    def _get_dependency_graph(self, contract_address: str) -> nx.DiGraph:
+        """
+        Xây dựng đồ thị phụ thuộc (Dependency Graph).
+        Khớp với luồng: get_dependency_graph() -> Query traces -> build nx.DiGraph()
+        """
+        print(f"[Pillar 1] Đang xây dựng đồ thị phụ thuộc cho {contract_address}...")
+        G = nx.DiGraph()
+        G.add_node(contract_address, audited=(contract_address in self.known_audited_contracts))
+        
+        # Truy vấn BigQuery để tìm các lệnh DELEGATECALL hoặc CALL
+        # (Đây là truy vấn ví dụ, có thể cần tinh chỉnh)
+        query = f"""
+            SELECT 
+                to_address
+            FROM `bigquery-public-data.crypto_ethereum.traces`
+            WHERE from_address = '{contract_address.lower()}'
+              AND (call_type = 'delegatecall' OR call_type = 'call')
+              AND to_address != '{contract_address.lower()}'
+            GROUP BY 1
+            LIMIT 30 -- Giới hạn để tránh quá tải
+        """
+        try:
+            df = self.db.query_to_dataframe(query)
+            if df.empty:
+                print("[Pillar 1] Không tìm thấy phụ thuộc (traces) nào.")
+                return G
+            
+            for _, row in df.iterrows():
+                dep_address = row['to_address'].lower()
+                is_audited = (dep_address in self.known_audited_contracts)
+                G.add_node(dep_address, audited=is_audited)
+                G.add_edge(contract_address, dep_address)
+                
+            print(f"[Pillar 1] Xây dựng đồ thị thành công, tìm thấy {len(df)} phụ thuộc.")
+            return G
+            
+        except Exception as e:
+            print(f"[Pillar 1] Lỗi khi truy vấn traces: {e}")
+            return G
+
+    def _analyze_hidden_risks(self, graph: nx.DiGraph) -> list:
+        """
+        Phân tích các rủi ro ẩn (hidden risks) từ đồ thị.
+        Khớp với luồng: analyze_hidden_risks()
+        """
+        hidden_risks = []
+        if graph.number_of_nodes() == 1:
+            return hidden_risks
+            
+        for node in graph.nodes():
+            if node == list(graph.nodes())[0]: # Bỏ qua nút gốc
+                continue
+            
+            is_audited = graph.nodes[node].get('audited', False)
+            if not is_audited:
+                # Nếu không có trong danh sách audited, kiểm tra xem có verified không
+                try:
+                    source = self.etherscan.get_contract_source_code(node)
+                    if not source or not source[0].get('SourceCode'):
+                        risk = f"Phụ thuộc vào hợp đồng CHƯA XÁC THỰC (unverified): {node}"
+                        hidden_risks.append(risk)
+                        print(f"[Pillar 1] RỦI RO: {risk}")
+                except Exception:
+                    risk = f"Lỗi khi kiểm tra phụ thuộc: {node}"
+                    hidden_risks.append(risk)
+
+        print(f"[Pillar 1] Phân tích rủi ro phụ thuộc hoàn tất. Tìm thấy {len(hidden_risks)} rủi ro.")
+        return hidden_risks
+
     def run(self, contract_address: str) -> dict:
         """
         Chạy phân tích Pillar 1 đầy đủ (Phiên bản Open-Source).
+        Khớp với công thức tính điểm của sơ đồ.
         """
         print("\n--- Bắt đầu Phân tích Pillar 1: Rủi ro Hợp đồng ---")
         
-        # 1. Phân tích Nội bộ (Đã được thiết kế lại)
+        # 1. Phân tích Nội bộ (Internal Risk)
         internal_risk = self._get_internal_risk(contract_address)
         
-        # 2. Phân tích Phụ thuộc (Giữ nguyên)
+        # 2. Phân tích Phụ thuộc (Dependency Risk)
         dependency_graph = self._get_dependency_graph(contract_address)
         hidden_risks = self._analyze_hidden_risks(dependency_graph)
         
-        # 3. Tính điểm cuối cùng
+        # 3. Tính điểm cuối cùng (Theo sơ đồ)
         internal_score = internal_risk.get('score', 50) / 100.0 # Chuẩn hóa về 0-1
+        
+        # Sơ đồ: count hidden_risks ≤ 5 -> (hidden/5)
         dependency_risk_count = len(hidden_risks)
+        dependency_risk_score = min(dependency_risk_count, 5) / 5.0 # Chuẩn hóa 0-1
         
-        final_risk_score = (internal_score * 0.4) + (min(dependency_risk_count, 5) / 5.0 * 0.6)
+        # Sơ đồ: 0.4*internal + 0.6*(hidden/5)
+        # Đây là điểm RỦI RO (cao là xấu), nên ta đảo ngược
+        # (Giả sử 1.0 là rủi ro tối đa)
+        final_risk_score = (internal_score * 0.4) + (dependency_risk_score * 0.6)
         
-        print(f" [Pillar 1] Hoàn tất. Điểm rủi ro cuối cùng: {final_risk_score:.2f}")
+        print(f" [Pillar 1] Hoàn tất. Điểm rủi ro nội bộ: {internal_score:.2f}, Điểm rủi ro phụ thuộc: {dependency_risk_score:.2f}")
+        print(f" [Pillar 1] Điểm rủi ro cuối cùng (0.4*Internal + 0.6*Dependency): {final_risk_score:.2f}")
         
         return {
             "final_risk_score": final_risk_score,
             "internal_risk": internal_risk,
-            "dependency_risks": hidden_risks
+            "dependency_risks": hidden_risks,
+            "dependency_graph_nodes": list(dependency_graph.nodes())
         }

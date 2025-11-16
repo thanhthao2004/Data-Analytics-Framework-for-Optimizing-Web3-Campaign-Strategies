@@ -2,7 +2,7 @@
 from analysis.pillar1_risk_model import ContractRiskAnalyzer
 from analysis.pillar2_gas_model import GasCostForecaster
 from analysis.pillar3_user_model import UserBehaviorAnalyzer
-
+import pandas as pd
 class AnalysisService:
     """
     Dịch vụ Tích hợp Framework.

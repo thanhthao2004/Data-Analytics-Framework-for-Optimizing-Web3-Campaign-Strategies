@@ -6,8 +6,8 @@ numpy
 
 # --- Pillar 1: Contract Risk Model ---
 networkx
-slither-analyzer  # <--- THÊM VÀO: Công cụ phân tích tĩnh open-source
-etherscan-python  # <--- THÊM VÀO: Để lấy mã nguồn đã xác thực
+slither-analyzer  # 
+etherscan-api  # 
 
 # --- Pillar 2: Gas Cost Model ---
 statsmodels
@@ -26,3 +26,4 @@ seaborn
 python-dotenv     # <--- THÊM VÀO: Cần cho config
 google-cloud-bigquery
 google-auth
+db-dtypes
