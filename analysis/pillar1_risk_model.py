@@ -5,7 +5,7 @@ import json
 import os
 import tempfile
 import shutil
-from etherscan.client import Etherscan
+from etherscan.client import Client
 from core.config import Config
 from connectors.db_connector import BigQueryConnector
 import pandas as pd
@@ -13,16 +13,11 @@ import pandas as pd
 class ContractRiskAnalyzer:
     """
     Triển khai Trụ cột 1 (Open-Source).
-    Sử dụng Slither (Phân tích nội bộ) và BigQuery/NetworkX (Phân tích phụ thuộc).
-    Khớp với sơ đồ Mermaid P1.
+    Sử dụng Slither (Phân tích nội bộ) và BigQuery (Phân tích phụ thuộc).
     """
     def __init__(self, db: BigQueryConnector):
-        self.db = db
-        # Khởi tạo API Etherscan để lấy mã nguồn
-        self.etherscan = Etherscan(
-            api_key=Config.ETHERSCAN_API_KEY, 
-            network="mainnet"
-        )
+        self.db = db,
+        self.api_key = Config.ETHERSCAN_API_KEY
         self.known_audited_contracts = self._load_known_audits()
         print("[Pillar 1] Đã khởi tạo ContractRiskAnalyzer.")
 
@@ -44,7 +39,8 @@ class ContractRiskAnalyzer:
         """
         print(f"[Pillar 1-OS] Đang lấy mã nguồn cho {contract_address}...")
         try:
-            source_data = self.etherscan.get_contract_source_code(contract_address)
+            client = Client(api_key=self.api_key)
+            source_data = client.get_source_code(address=contract_address)
             if not source_data or not source_data[0].get('SourceCode'):
                 print(f"[Pillar 1-OS] Không tìm thấy mã nguồn đã xác thực.")
                 return {"score": 50, "issues_found": ["No verified source code"]}
@@ -161,7 +157,7 @@ class ContractRiskAnalyzer:
         hidden_risks = []
         if graph.number_of_nodes() == 1:
             return hidden_risks
-            
+        client = Client(api_key=self.api_key)
         for node in graph.nodes():
             if node == list(graph.nodes())[0]: # Bỏ qua nút gốc
                 continue
@@ -170,7 +166,7 @@ class ContractRiskAnalyzer:
             if not is_audited:
                 # Nếu không có trong danh sách audited, kiểm tra xem có verified không
                 try:
-                    source = self.etherscan.get_contract_source_code(node)
+                    source = client.get_source_code(address=node)
                     if not source or not source[0].get('SourceCode'):
                         risk = f"Phụ thuộc vào hợp đồng CHƯA XÁC THỰC (unverified): {node}"
                         hidden_risks.append(risk)

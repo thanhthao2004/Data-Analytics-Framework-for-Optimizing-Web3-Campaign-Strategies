@@ -7,7 +7,7 @@ numpy
 # --- Pillar 1: Contract Risk Model ---
 networkx
 slither-analyzer  # 
-etherscan-api  # 
+etherscan-api
 
 # --- Pillar 2: Gas Cost Model ---
 statsmodels
@@ -23,7 +23,7 @@ web3
 requests
 matplotlib
 seaborn
-python-dotenv     # <--- THÊM VÀO: Cần cho config
+python-dotenv     
 google-cloud-bigquery
 google-auth
 db-dtypes
