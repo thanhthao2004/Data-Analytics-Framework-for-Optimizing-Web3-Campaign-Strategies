@@ -73,7 +73,9 @@ class UserBehaviorAnalyzer:
         X_scaled = scaler.fit_transform(X)
         
         # Khớp với luồng: DBSCAN(eps=0.5, min_samples=3)
-        dbscan = DBSCAN(eps=0.5, min_samples=3)
+        dynamic_min_samples = 2 if len(wallet_list) < 3 else 3
+        print(f"[Pillar 3] Chạy DBSCAN với eps=0.5, min_samples={dynamic_min_samples}")
+        dbscan = DBSCAN(eps=0.5, min_samples=dynamic_min_samples)
         clusters = dbscan.fit_predict(X_scaled)
         
         features_df['cluster'] = clusters

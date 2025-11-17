@@ -1,0 +1,68 @@
+=======================================================
+ Khởi tạo Framework Phân tích Chiến dịch Web3
+=======================================================
+[Connector] Đã kết nối thành công tới BigQuery.
+[Pillar 1] Đang tải danh sách hợp đồng đã kiểm toán...
+[Pillar 1] Đã khởi tạo ContractRiskAnalyzer.
+ === BẮT ĐẦU CHẠY FRAMEWORK PHÂN TÍCH TỔNG HỢP === 
+
+--- Bắt đầu Phân tích Pillar 1: Rủi ro Hợp đồng ---
+[Pillar 1-OS] Đang lấy mã nguồn cho 0xB8c77482e45F1F44dE1745F52C74426C631bDD52...
+[Pillar 1-OS] Không tìm thấy mã nguồn đã xác thực (hoặc lỗi API).
+[Pillar 1] Đang xây dựng đồ thị phụ thuộc cho 0xB8c77482e45F1F44dE1745F52C74426C631bDD52...
+[Connector] ƯỚC TÍNH TRUY VẤN: Sẽ quét 111.2257 GB.
+[Connector] Đang thực thi truy vấn...
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/google/cloud/bigquery/table.py:1994: UserWarning: BigQuery Storage module not found, fetch data with the REST endpoint instead.
+  warnings.warn(
+[Connector] Truy vấn thành công, trả về 0 dòng.
+[Pillar 1] Không tìm thấy phụ thuộc (traces) nào trong 90 ngày gần nhất.
+ [Pillar 1] Hoàn tất. Điểm rủi ro nội bộ: 0.50, Điểm rủi ro phụ thuộc: 0.00
+ [Pillar 1] Điểm rủi ro cuối cùng (0.4*Internal + 0.6*Dependency): 0.20
+
+--- Bắt đầu Phân tích Pillar 2: Chi phí Gas ---
+[Pillar 2] Đang lấy dữ liệu gas lịch sử (30 ngày)...
+[Connector] ƯỚC TÍNH TRUY VẤN: Sẽ quét 0.0032 GB.
+[Connector] Đang thực thi truy vấn...
+[Connector] Truy vấn thành công, trả về 721 dòng.
+[Pillar 2] Đang huấn luyện mô hình ARIMA...
+[Pillar 2] Huấn luyện mô hình hoàn tất.
+[Pillar 2] Đang dự báo cho 168 giờ tới...
+[Pillar 2] Hoàn tất. Cửa sổ 4 giờ rẻ nhất bắt đầu lúc: 2025-11-17 09:00:00+00:00 UTC
+
+--- Bắt đầu Phân tích Pillar 3: Hành vi Người dùng ---
+[Pillar 3] Đang lấy đặc điểm Sybil cho 2 ví...
+[Connector] ƯỚC TÍNH TRUY VẤN: Sẽ quét 45.8032 GB.
+[Connector] Đang thực thi truy vấn...
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/google/cloud/bigquery/table.py:1994: UserWarning: BigQuery Storage module not found, fetch data with the REST endpoint instead.
+  warnings.warn(
+[Connector] Truy vấn thành công, trả về 2 dòng.
+[Pillar 3] Phát hiện 0 cụm Sybil.
+[Pillar 3] Đang chạy Phân tích Cohort (sau ngày 2025-6-23)...
+[Connector] ƯỚC TÍNH TRUY VẤN: Sẽ quét 20.8490 GB.
+[Connector] Đang thực thi truy vấn...
+/Library/Frameworks/Python.framework/Versions/3.11/lib/python3.11/site-packages/google/cloud/bigquery/table.py:1994: UserWarning: BigQuery Storage module not found, fetch data with the REST endpoint instead.
+  warnings.warn(
+[Connector] Truy vấn thành công, trả về 148 dòng.
+[Pillar 3] Phân tích Cohort hoàn tất.
+[Pillar 3] Đang phân tích giờ vàng hoạt động cho 0xB8c77482e45F1F44dE1745F52C74426C631bDD52...
+[Connector] ƯỚC TÍNH TRUY VẤN: Sẽ quét 7.0632 GB.
+[Connector] Đang thực thi truy vấn...
+[Connector] Truy vấn thành công, trả về 1 dòng.
+[Pillar 3] Phát hiện giờ vàng: 19:00 UTC (Volume cao nhất).
+
+ === PHÂN TÍCH TỔNG HỢP HOÀN TẤT === 
+
+ === BÁO CÁO HỖ TRỢ QUYẾT ĐỊNH CHIẾN LƯỢC === 
+ [INFO] So sánh Trade-off: Gas rẻ nhất 9h vs User đông nhất 19h
+ [OK P1]: Điểm rủi ro hợp đồng thấp (0.20). An toàn để tiếp tục.
+
+ [THÔNG TIN P2]: Cửa sổ gas tối ưu (rẻ nhất) trong 7 ngày tới dự kiến bắt đầu lúc 2025-11-17 09:00:00+00:00 (UTC).
+
+ [THÔNG TIN P3]: Tỷ lệ giữ chân trung bình (Day 7) là 7.09%.
+
+ [TRADE-OFF P2 vs P3]: Cửa sổ gas rẻ nhất (P2) lúc 9:00 KHÔNG trùng với giờ hoạt động của người dùng chất lượng (P3) (Giả định 19:00). ĐỀ XUẤT: Chấp nhận chi phí gas cao hơn để triển khai lúc 14:00 nhằm tối đa hóa ROI người dùng.
+
+
+=======================================================
+ Phân tích hoàn tất.
+=======================================================

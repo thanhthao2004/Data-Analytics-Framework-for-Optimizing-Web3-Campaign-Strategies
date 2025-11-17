@@ -53,8 +53,12 @@ class ContractRiskAnalyzer:
             source_data = self._fetch_source_code_direct(contract_address)
             
             if not source_data or not source_data[0].get('SourceCode'):
-                print(f"[Pillar 1-OS] Không tìm thấy mã nguồn đã xác thực (hoặc lỗi API).")
-                return {"score": 50, "issues_found": ["No verified source code"]}
+                print(f"[Pillar 1-OS] CẢNH BÁO: Không tìm thấy mã nguồn trên Etherscan.")
+                # Trả về kết quả trung thực cho báo cáo
+                return {
+                    "score": 0, 
+                    "issues_found": ["CRITICAL ERROR: Không thể lấy Source Code. Không thể đánh giá rủi ro nội bộ."]
+                }
             
             source_code = source_data[0]['SourceCode']
             contract_name = source_data[0]['ContractName']
