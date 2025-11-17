@@ -141,6 +141,36 @@ class UserBehaviorAnalyzer:
         print("[Pillar 3] Phân tích Cohort hoàn tất.")
         return cohort_df
 
+    def get_peak_activity_hour(self, contract_address: str) -> int:
+        """
+        Tìm 'Giờ Vàng' - giờ hoạt động cao điểm của người dùng (0-23h UTC) 
+        dựa trên lịch sử giao dịch 90 ngày qua.
+        """
+        print(f"[Pillar 3] Đang phân tích giờ vàng hoạt động cho {contract_address}...")
+        
+        # Truy vấn BigQuery để đếm số lượng giao dịch theo từng giờ trong ngày (0-23)
+        query = f"""
+            SELECT 
+                EXTRACT(HOUR FROM block_timestamp) as hour_of_day,
+                COUNT(*) as tx_count
+            FROM `bigquery-public-data.crypto_ethereum.transactions`
+            WHERE to_address = '{contract_address.lower()}'
+              -- Tối ưu hóa: Chỉ quét 90 ngày gần nhất để tiết kiệm chi phí & lấy xu hướng mới
+              AND DATE(block_timestamp) >= DATE_SUB(CURRENT_DATE(), INTERVAL 90 DAY)
+            GROUP BY 1
+            ORDER BY 2 DESC
+            LIMIT 1
+        """
+        df = self.db.query_to_dataframe(query)
+        
+        if df.empty:
+            print("[Pillar 3] Không đủ dữ liệu giao dịch. Mặc định chọn 14h UTC.")
+            return 14 # Giá trị fallback an toàn nếu contract mới tinh
+            
+        peak_hour = int(df.iloc[0]['hour_of_day'])
+        print(f"[Pillar 3] Phát hiện giờ vàng: {peak_hour}:00 UTC (Volume cao nhất).")
+        return peak_hour
+    
     def run(self, wallet_list: list, campaign_start_date: str) -> dict:
         """
         Chạy phân tích Pillar 3 đầy đủ.
@@ -148,8 +178,12 @@ class UserBehaviorAnalyzer:
         print("\n--- Bắt đầu Phân tích Pillar 3: Hành vi Người dùng ---")
         sybil_results = self.detect_sybil_clusters(wallet_list)
         cohort_results = self.run_cohort_analysis(campaign_start_date)
+
+        # Tự động tính giờ vàng thay vì hardcode
+        peak_hour = self.get_peak_activity_hour(Config.TARGET_CONTRACT_ADDRESS)
         
         return {
             "sybil_analysis": sybil_results,
-            "cohort_analysis": cohort_results
+            "cohort_analysis": cohort_results,
+            "peak_activity_hour": peak_hour # <-- Trả về kết quả mới
         }
