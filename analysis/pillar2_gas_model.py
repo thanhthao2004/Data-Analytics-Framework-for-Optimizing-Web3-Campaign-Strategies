@@ -40,7 +40,7 @@ class GasCostForecaster:
         df.set_index('hour', inplace=True)
         
         # Khớp với luồng: Resample hourly -> fill missing hours
-        df = df.resample('H').ffill() 
+        df = df.resample('h').ffill() 
         return df['avg_gwei']
 
     def _train_model(self, data):
