@@ -1,22 +1,24 @@
 {
-  "timestamp": "2025-12-08T11:04:09.768336",
+  "timestamp": "2025-12-08T14:27:25.780562",
   "forecast_days": 7,
-  "best_window_start_utc": "2025-12-10 21:00:00+00:00",
-  "estimated_avg_gwei": 0.04789311291744108,
+  "best_window_start_utc": "2025-12-13 02:00:00+00:00",
+  "estimated_avg_gwei": -0.1990015955738479,
   "model_accuracy": {
-    "mae": 0.0662820020266815,
-    "rmse": 0.16722715351938838,
-    "mape": 115.7765361371287,
-    "r_squared": -2.324262269648436e-05,
-    "aic": 498.74880816845206,
-    "bic": 511.6894523072833,
-    "log_likelihood": -246.37440408422603,
-    "test_samples": 139
+    "mae": 0.27906263567579204,
+    "mae_std": 0.09737754236416615,
+    "rmse": 0.4635146668678131,
+    "rmse_std": 0.24202945482705465,
+    "mape": 276.3602910339794,
+    "mape_std": 154.34558972533637,
+    "r_squared": -1.998250162679577,
+    "r_squared_std": 2.0867823213805163,
+    "validation_method": "cross_validation",
+    "n_folds": 5
   },
   "model_fit_metrics": {
-    "aic_full": 485.6971672761406,
-    "bic_full": 499.3115867474436,
-    "log_likelihood_full": -239.8485836380703
+    "aic_full": 515.3284115196085,
+    "bic_full": 555.4534560697116,
+    "log_likelihood_full": -248.66420575980425
   },
   "forecast_csv": "data/pillar2_gas/forecast/gas_forecast_7d_20251208.csv"
 }

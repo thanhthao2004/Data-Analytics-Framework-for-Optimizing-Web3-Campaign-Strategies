@@ -170,6 +170,8 @@ class AnalysisService:
             mape = accuracy.get('mape', None)
             r_squared = accuracy.get('r_squared', None)
             reliability_text = ""
+            is_unreliable = False
+            
             if mape is not None and not np.isnan(mape):
                 if mape < 5:
                     reliability_text = "RẤT CAO"
@@ -177,16 +179,37 @@ class AnalysisService:
                     reliability_text = "CAO"
                 elif mape < 20:
                     reliability_text = "TRUNG BÌNH"
-                else:
+                elif mape < 50:
                     reliability_text = "THẤP"
-                rec_accuracy = (f"[ĐỘ TIN CẬY P2]: Mô hình ARIMA có độ chính xác {reliability_text} "
-                              f"(MAPE: {mape:.2f}%, RMSE: {accuracy.get('rmse', 0):.4f} Gwei).")
+                else:
+                    reliability_text = "KHÔNG ĐÁNG TIN CẬY"
+                    is_unreliable = True
+                
+                # Cảnh báo nếu R² < 0 hoặc MAPE > 100%
+                if (r_squared is not None and not np.isnan(r_squared) and r_squared < 0) or mape > 100:
+                    is_unreliable = True
+                    r2_str = f"{r_squared:.6f}" if r_squared is not None else "N/A"
+                    rec_accuracy = (f"[⚠️ CẢNH BÁO P2 - MÔ HÌNH KHÔNG ĐÁNG TIN CẬY]: "
+                                  f"MAPE: {mape:.2f}% (Rất cao), R²: {r2_str} (<0). "
+                                  f"Dự báo gas KHÔNG đáng tin cậy. Nên bỏ qua P2, chỉ dựa vào P3 (User peak hour).")
+                else:
+                    rec_accuracy = (f"[ĐỘ TIN CẬY P2]: Mô hình ARIMA có độ chính xác {reliability_text} "
+                                  f"(MAPE: {mape:.2f}%, RMSE: {accuracy.get('rmse', 0):.4f} Gwei).")
             elif r_squared is not None and not np.isnan(r_squared):
-                rec_accuracy = (f"[ĐỘ TIN CẬY P2]: Mô hình ARIMA có R² = {r_squared:.4f} "
-                              f"({r_squared*100:.2f}% phương sai được giải thích).")
+                if r_squared < 0:
+                    is_unreliable = True
+                    rec_accuracy = (f"[⚠️ CẢNH BÁO P2]: R² = {r_squared:.6f} < 0. "
+                                  f"Mô hình không đáng tin cậy.")
+                else:
+                    rec_accuracy = (f"[ĐỘ TIN CẬY P2]: Mô hình ARIMA có R² = {r_squared:.4f} "
+                                  f"({r_squared*100:.2f}% phương sai được giải thích).")
             else:
                 rec_accuracy = f"[ĐỘ TIN CẬY P2]: Mô hình đã được đánh giá (AIC: {accuracy.get('aic', 'N/A'):.2f}, BIC: {accuracy.get('bic', 'N/A'):.2f})."
+            
             self.recommendations.append(rec_accuracy)
+            
+            # Lưu flag để sử dụng trong trade-off logic
+            p2['model_unreliable'] = is_unreliable
 
         # 3. Phân tích P3: Hành vi Người dùng
         sybil_clusters = p3.get('sybil_analysis', {}).get('total_clusters', 0)
@@ -203,14 +226,26 @@ class AnalysisService:
         # 4. Phân tích TRADE-OFF (Tổng hợp) [cite: 260, 261]
         
         # Trade-off P2 vs P3[cite: 260]:
-        # (Giả sử phân tích P3 cho thấy giờ hoạt động tốt nhất là 14:00 UTC)
         try:
             best_gas_hour = pd.to_datetime(best_window).hour
-           # Lấy giờ User hoạt động mạnh nhất từ kết quả P3 (thay vì hardcode = 14)
+            # Lấy giờ User hoạt động mạnh nhất từ kết quả P3
             best_user_hour = p3.get('peak_activity_hour', 14)
+            
+            # Kiểm tra xem mô hình P2 có đáng tin cậy không
+            model_unreliable = p2.get('model_unreliable', False)
+            
             print(f" [INFO] So sánh Trade-off: Gas rẻ nhất {best_gas_hour}h vs User đông nhất {best_user_hour}h")
-            if abs(best_gas_hour - best_user_hour) > 4:
-                # SỬA ĐỔI: Khuyến nghị theo giờ tối ưu của User (best_user_hour) thay vì 14:00 cố định.
+            
+            # NẾU MÔ HÌNH P2 KHÔNG ĐÁNG TIN CẬY: Bỏ qua P2, chỉ dùng P3
+            if model_unreliable:
+                rec = (f"[TRADE-OFF P2 vs P3 - MÔ HÌNH P2 KHÔNG ĐÁNG TIN CẬY]: "
+                       f"Mô hình ARIMA có độ chính xác kém (MAPE > 100% hoặc R² < 0). "
+                       f"Dự báo gas không đáng tin cậy. "
+                       f"KHUYẾN NGHỊ: Bỏ qua cửa sổ gas tối ưu (P2), triển khai lúc {best_user_hour}:00 UTC "
+                       f"theo giờ peak activity của người dùng (P3) để tối đa hóa ROI.")
+                self.recommendations.append(rec)
+            elif abs(best_gas_hour - best_user_hour) > 4:
+                # Nếu mô hình đáng tin cậy và có trade-off
                 rec = (f"[TRADE-OFF P2 vs P3]: Cửa sổ gas rẻ nhất (P2) lúc {best_gas_hour}:00 "
                        f"KHÔNG trùng với giờ hoạt động của người dùng chất lượng (P3) (Giá trị P3: {best_user_hour}:00). "
                        f"ĐỀ XUẤT: Chấp nhận chi phí gas cao hơn để triển khai lúc {best_user_hour}:00 "
@@ -218,7 +253,7 @@ class AnalysisService:
                 self.recommendations.append(rec)
             else:
                 # Nếu giờ gas rẻ và giờ user gần nhau -> Tuyệt vời
-                rec = (f"[CƠ HỘI VÀNG]: Giờ gas rẻ ({best_gas_hour}h) trùng khớp với giờ người dùng hoạt động mạnh. "
+                rec = (f"[CƠ HỘI VÀNG]: Giờ gas rẻ ({best_gas_hour}h) trùng khớp với giờ người dùng hoạt động mạnh ({best_user_hour}h). "
                        "Đây là thời điểm triển khai hoàn hảo!")
                 self.recommendations.append(rec)
         except Exception as e:

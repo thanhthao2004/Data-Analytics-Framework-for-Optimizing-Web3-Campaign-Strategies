@@ -68,9 +68,15 @@ class ContractRiskAnalyzer:
         }
 
     def _fetch_source_code_direct(self, address: str):
-        """Hàm gọi API trực tiếp để tránh lỗi thư viện"""
-        url = "https://api.etherscan.io/api"
+        """
+        Hàm gọi API trực tiếp để tránh lỗi thư viện.
+        UPDATED: Sử dụng Etherscan API V2 (V1 deprecated Dec 2024)
+        V2 requires 'chainid' parameter (1 = Ethereum mainnet)
+        """
+        # V2 endpoint (updated Dec 2024)
+        url = "https://api.etherscan.io/v2/api"
         params = {
+            "chainid": "1",  # Ethereum mainnet (REQUIRED for V2)
             "module": "contract",
             "action": "getsourcecode",
             "address": address,
@@ -81,7 +87,10 @@ class ContractRiskAnalyzer:
             data = response.json()
             if data.get('status') == '1' and data.get('result'):
                 return data['result'] # Trả về list chứa source code
-            return None
+            else:
+                # Debug info
+                print(f" [API Info] V2 response status: {data.get('status')}, message: {data.get('message')}")
+                return None
         except Exception as e:
             print(f" [API Error] Lỗi kết nối Etherscan: {e}")
             return None
@@ -92,16 +101,120 @@ class ContractRiskAnalyzer:
             source_data = self._fetch_source_code_direct(contract_address)
             
             if not source_data or not source_data[0].get('SourceCode'):
-                print(f"[Pillar 1-OS] CẢNH BÁO: Không tìm thấy mã nguồn trên Etherscan.")
-                # Trả về score = 50 (default) khi không tìm thấy source code
-                # Điều này phù hợp với logic trong run() sử dụng default 50
+                print(f"[Pillar 1-OS] ⚠️  LIMITATION: Không tìm thấy mã nguồn verified trên Etherscan.")
+                # Return default score với flag warning để framework tiếp tục chạy
+                # NHƯNG người dùng PHẢI biết đây là limitation, không phải kết quả thật
                 return {
-                    "score": 50,  # Default score khi không tìm thấy source code
-                    "issues_found": ["CRITICAL ERROR: Không thể lấy Source Code. Không thể đánh giá rủi ro nội bộ."]
+                    "score": 50,  # Default moderate risk
+                    "is_default": True,  # FLAG: Đây là giả định, không phải analysis
+                    "limitation": "NO_SOURCE_CODE",
+                    "issues_found": ["⚠️ LIMITATION: Contract source code not verified. Using default moderate risk score (50/100)."]
                 }
             
             source_code = source_data[0]['SourceCode']
             contract_name = source_data[0]['ContractName']
+            
+            print(f" [Pillar 1-OS] Đã lấy mã nguồn hợp đồng: {contract_name}")
+            
+            # Tạo thư mục tạm để lưu source code
+            temp_dir = tempfile.mkdtemp()
+            print(f" [Pillar 1-OS] Đã tạo thư mục tạm: {temp_dir}")
+            
+            try:
+                # Lưu source code vào file .sol
+                contract_file = os.path.join(temp_dir, f"{contract_name}.sol")
+                
+                # Xử lý trường hợp source code là JSON (multi-file)
+                if source_code.startswith('{{'):
+                    source_code = source_code[1:-1]  # Remove outer braces
+                    
+                with open(contract_file, 'w') as f:
+                    f.write(source_code)
+                
+                # Chạy Slither để phân tích
+                print(f" [Pillar 1-OS] Đang chạy Slither...")
+                result = subprocess.run(
+                    ['slither', contract_file, '--json', '-'],
+                    capture_output=True,
+                    text=True,
+                    timeout=60
+                )
+                
+                if result.returncode != 0:
+                    print(f" [Pillar 1-OS] ⚠️  LIMITATION: Slither analysis failed (missing Solidity compiler).")
+                    print(f" [Pillar 1-OS] Error: {result.stderr[:200]}")
+                    # Return default score với flag warning
+                    return {
+                        "score": 50,  # Default moderate risk
+                        "is_default": True,  # FLAG: Đây là giả định
+                        "limitation": "SLITHER_UNAVAILABLE",
+                        "issues_found": [
+                            f"⚠️ LIMITATION: Static analysis unavailable (requires solc compiler).",
+                            f"Using default moderate risk score (50/100).",
+                            f"For production: Install Solidity compiler to enable full analysis."
+                        ]
+                    }
+                
+                # Parse kết quả JSON từ Slither
+                try:
+                    slither_output = json.loads(result.stdout)
+                except json.JSONDecodeError:
+                    print(f" [Pillar 1-OS] ⚠️  LIMITATION: Cannot parse Slither output.")
+                    return {
+                        "score": 50,
+                        "is_default": True,
+                        "limitation": "SLITHER_PARSE_ERROR",
+                        "issues_found": ["⚠️ LIMITATION: Slither output invalid. Using default score."]
+                    }
+                
+                # Đếm số lượng issues theo mức độ nghiêm trọng
+                high_issues = 0
+                medium_issues = 0
+                low_issues = 0
+                issues_found = []
+                
+                for detector in slither_output.get('results', {}).get('detectors', []):
+                    impact = detector.get('impact', '').lower()
+                    description = detector.get('description', 'Unknown issue')
+                    
+                    if impact == 'high':
+                        high_issues += 1
+                        issues_found.append(f"[HIGH] {description}")
+                    elif impact == 'medium':
+                        medium_issues += 1
+                        issues_found.append(f"[MEDIUM] {description}")
+                    elif impact == 'low':
+                        low_issues += 1
+                        issues_found.append(f"[LOW] {description}")
+                
+                # Tính điểm rủi ro (0-100)
+                raw_score = (high_issues * 10) + (medium_issues * 5) + (low_issues * 1)
+                risk_score = min(raw_score, 100)
+                
+                print(f" [Pillar 1-OS] ✅ Slither analysis complete: {high_issues}H, {medium_issues}M, {low_issues}L")
+                print(f" [Pillar 1-OS] Internal Risk Score: {risk_score}/100")
+                
+                return {
+                    "score": risk_score,
+                    "is_default": False,  # ✅ Real analysis
+                    "high_issues": high_issues,
+                    "medium_issues": medium_issues,
+                    "low_issues": low_issues,
+                    "issues_found": issues_found[:10]
+                }
+                
+            finally:
+                shutil.rmtree(temp_dir)
+                print(f" [Pillar 1-OS] Đã dọn dẹp thư mục tạm.")
+                
+        except Exception as e:
+            print(f" [Pillar 1-OS] ⚠️  LIMITATION: Unexpected error: {e}")
+            return {
+                "score": 50,
+                "is_default": True,
+                "limitation": "UNEXPECTED_ERROR",
+                "issues_found": [f"⚠️ LIMITATION: {str(e)}. Using default score."]
+            }
 
             # Xử lý Source Code (Solidity standard JSON input, Single file)
             if source_code.startswith('{{'):

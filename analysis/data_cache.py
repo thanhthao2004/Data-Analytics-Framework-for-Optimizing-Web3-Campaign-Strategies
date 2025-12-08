@@ -241,12 +241,14 @@ class DataCache:
     
     # ========== PILLAR 2: Gas Forecast ==========
     
-    def save_pillar2_historical(self, gas_data: pd.Series, days_back: int = 30) -> bool:
+    def save_pillar2_historical(self, gas_data, days_back: int = 30) -> bool:
         """
         Lưu dữ liệu gas lịch sử vào file CSV.
         
+        PHASE 2: Hỗ trợ cả DataFrame (SARIMAX với exog) và Series (old ARIMA).
+        
         Args:
-            gas_data: Pandas Series chứa dữ liệu gas theo giờ
+            gas_data: Pandas Series hoặc DataFrame chứa dữ liệu gas theo giờ
             days_back: Số ngày lấy dữ liệu
             
         Returns:
@@ -254,10 +256,20 @@ class DataCache:
         """
         try:
             file_path = self._get_pillar2_historical_path(days_back)
-            df = pd.DataFrame({
-                'hour': gas_data.index,
-                'avg_gwei': gas_data.values
-            })
+            
+            if isinstance(gas_data, pd.DataFrame):
+                # PHASE 2: Save full DataFrame with all columns
+                df = gas_data.copy()
+                df = df.reset_index()  # Move index to column named 'hour'
+                if df.columns[0] != 'hour':
+                    df.rename(columns={df.columns[0]: 'hour'}, inplace=True)
+            else:
+                # Old format: Series -> convert to DataFrame
+                df = pd.DataFrame({
+                    'hour': gas_data.index,
+                    'avg_gwei': gas_data.values
+                })
+            
             df.to_csv(file_path, index=False)
             print(f"[Cache] Đã lưu dữ liệu gas lịch sử ({days_back}d) vào: {file_path}")
             return True
@@ -265,15 +277,17 @@ class DataCache:
             print(f"[Cache] Lỗi khi lưu dữ liệu gas lịch sử: {e}")
             return False
     
-    def load_pillar2_historical(self, days_back: int = 30) -> pd.Series:
+    def load_pillar2_historical(self, days_back: int = 30):
         """
         Đọc dữ liệu gas lịch sử từ file CSV.
+        
+        PHASE 2: Trả về DataFrame nếu có exogenous variables, Series nếu chỉ có avg_gwei.
         
         Args:
             days_back: Số ngày dữ liệu cần đọc
             
         Returns:
-            Pandas Series hoặc None nếu không tìm thấy
+            Pandas DataFrame (SARIMAX) hoặc Series (old ARIMA) hoặc None nếu không tìm thấy
         """
         try:
             file_path = self._get_pillar2_historical_path(days_back)
@@ -286,7 +300,18 @@ class DataCache:
             df.set_index('hour', inplace=True)
             
             print(f"[Cache] Đã đọc dữ liệu gas lịch sử ({days_back}d) từ: {file_path}")
-            return df['avg_gwei']
+            
+            # PHASE 2: Check if exogenous variables exist
+            exog_cols = [col for col in df.columns if col != 'avg_gwei']
+            
+            if exog_cols:
+                # Return full DataFrame (SARIMAX format)
+                print(f"[Cache] Phát hiện exogenous variables: {exog_cols}")
+                return df
+            else:
+                # Return Series (old ARIMA format, backward compatibility)
+                print("[Cache] Dữ liệu old format (chỉ có avg_gwei)")
+                return df['avg_gwei']
             
         except Exception as e:
             print(f"[Cache] Lỗi khi đọc dữ liệu gas lịch sử: {e}")

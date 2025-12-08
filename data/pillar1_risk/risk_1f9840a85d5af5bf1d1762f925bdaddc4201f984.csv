@@ -1,0 +1,7 @@
+metric,value,type
+final_risk_score,0.2,score
+internal_risk_score,0.5,score
+dependency_risk_count,0,count
+dependency_nodes_count,1,count
+dependency_node_1,0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984,address
+internal_issue_1,⚠️ LIMITATION: Static analysis unavaila

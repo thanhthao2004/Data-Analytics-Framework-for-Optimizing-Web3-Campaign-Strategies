@@ -22,7 +22,9 @@ class Config:
     
     # Địa chỉ hợp đồng mục tiêu mà chiến dịch sẽ tương tác
     # [Pillar 1] Đây là đối tượng phân tích rủi ro chính
-    TARGET_CONTRACT_ADDRESS = "0xB8c77482e45F1F44dE1745F52C74426C631bDD52"
+    # UPDATED: Chuyển sang UNI (Uniswap) - hợp đồng verified, đơn giản hơn USDT
+    # Contract info: https://etherscan.io/address/0x1f9840a85d5af5bf1d1762f925bdaddc4201f984
+    TARGET_CONTRACT_ADDRESS = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984"  # Uniswap UNI Token
     
     # Danh sách các ví tiềm năng để phân tích Sybil (nếu có)
     # [Pillar 3] Dùng cho phân tích chủ động (proactive)

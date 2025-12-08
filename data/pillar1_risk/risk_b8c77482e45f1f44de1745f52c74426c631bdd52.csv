@@ -1,7 +1,0 @@
-metric,value,type
-final_risk_score,0.0,score
-internal_risk_score,0,score
-dependency_risk_count,0,count
-dependency_nodes_count,1,count
-dependency_node_1,0xB8c77482e45F1F44dE1745F52C74426C631bDD52,address
-internal_issue_1,CRITICAL ERROR: Không thể lấy Source Code. Không thể đánh giá rủi ro nội bộ.,issue_description
