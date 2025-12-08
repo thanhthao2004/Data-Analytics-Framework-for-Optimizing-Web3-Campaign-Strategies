@@ -173,10 +173,28 @@ class UserBehaviorAnalyzer:
         print(f"[Pillar 3] Phát hiện giờ vàng: {peak_hour}:00 UTC (Volume cao nhất).")
         return peak_hour
     
-    def run(self, wallet_list: list, campaign_start_date: str) -> dict:
+    def run(self, wallet_list: list, campaign_start_date: str, use_cache: bool = False, save_cache: bool = True) -> dict:
         """
         Chạy phân tích Pillar 3 đầy đủ.
+        
+        Args:
+            wallet_list: Danh sách địa chỉ ví cần phân tích
+            campaign_start_date: Ngày bắt đầu chiến dịch (YYYY-MM-DD)
+            use_cache: Nếu True, sẽ đọc từ cache nếu có, không query lại BigQuery
+            save_cache: Nếu True, sẽ lưu kết quả vào cache sau khi phân tích
         """
+        # Import DataCache ở đây để tránh circular import
+        from analysis.data_cache import DataCache
+        
+        cache = DataCache()
+        
+        # Thử đọc từ cache nếu được yêu cầu
+        if use_cache:
+            cached_result = cache.load_pillar3(campaign_start_date)
+            if cached_result is not None:
+                print("[Pillar 3] Đã sử dụng dữ liệu từ cache (không query BigQuery).")
+                return cached_result
+        
         print("\n--- Bắt đầu Phân tích Pillar 3: Hành vi Người dùng ---")
         sybil_results = self.detect_sybil_clusters(wallet_list)
         cohort_results = self.run_cohort_analysis(campaign_start_date)
@@ -184,8 +202,14 @@ class UserBehaviorAnalyzer:
         # Tự động tính giờ vàng thay vì hardcode
         peak_hour = self.get_peak_activity_hour(Config.TARGET_CONTRACT_ADDRESS)
         
-        return {
+        result = {
             "sybil_analysis": sybil_results,
             "cohort_analysis": cohort_results,
             "peak_activity_hour": peak_hour # <-- Trả về kết quả mới
         }
+        
+        # Lưu vào cache nếu được yêu cầu
+        if save_cache:
+            cache.save_pillar3(result, campaign_start_date)
+        
+        return result

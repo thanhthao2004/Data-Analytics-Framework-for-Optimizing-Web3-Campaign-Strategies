@@ -1,0 +1,22 @@
+{
+  "timestamp": "2025-12-08T11:04:09.768336",
+  "forecast_days": 7,
+  "best_window_start_utc": "2025-12-10 21:00:00+00:00",
+  "estimated_avg_gwei": 0.04789311291744108,
+  "model_accuracy": {
+    "mae": 0.0662820020266815,
+    "rmse": 0.16722715351938838,
+    "mape": 115.7765361371287,
+    "r_squared": -2.324262269648436e-05,
+    "aic": 498.74880816845206,
+    "bic": 511.6894523072833,
+    "log_likelihood": -246.37440408422603,
+    "test_samples": 139
+  },
+  "model_fit_metrics": {
+    "aic_full": 485.6971672761406,
+    "bic_full": 499.3115867474436,
+    "log_likelihood_full": -239.8485836380703
+  },
+  "forecast_csv": "data/pillar2_gas/forecast/gas_forecast_7d_20251208.csv"
+}

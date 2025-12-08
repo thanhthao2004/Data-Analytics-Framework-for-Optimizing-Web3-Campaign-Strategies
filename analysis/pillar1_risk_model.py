@@ -1,4 +1,3 @@
-
 import networkx as nx
 import subprocess
 import json
@@ -14,6 +13,46 @@ class ContractRiskAnalyzer:
     """
     Triển khai Trụ cột 1 (Open-Source).
     Sử dụng Slither (Phân tích nội bộ) và BigQuery (Phân tích phụ thuộc).
+    
+    Công thức Tính Điểm Rủi ro Tổng hợp:
+    ====================================
+    
+    Final Risk Score = (Internal Risk Score × 0.4) + (Dependency Risk Score × 0.6)
+    
+    Trong đó:
+    ---------
+    
+    1. Internal Risk Score (Trọng số: 0.4):
+       - Điểm được tính từ kết quả phân tích mã nguồn tĩnh bằng Slither
+       - Công thức: Score = max(0, 100 - (Số vấn đề phát hiện × 5)) / 100
+       - Nếu không tìm thấy mã nguồn trên Etherscan:
+         * Điểm mặc định: 50/100 = 0.50
+         * Đây là điểm trung bình, thể hiện sự không chắc chắn về rủi ro
+       - Ví dụ: Nếu Slither phát hiện 0 vấn đề → Score = 100/100 = 1.00
+       - Ví dụ: Nếu Slither phát hiện 10 vấn đề → Score = (100-50)/100 = 0.50
+    
+    2. Dependency Risk Score (Trọng số: 0.6):
+       - Điểm được tính dựa trên số lượng hợp đồng phụ thuộc CHƯA ĐƯỢC XÁC THỰC/KIỂM TOÁN
+       - Công thức: Score = min(Số rủi ro phụ thuộc, 5) / 5.0
+       - Nếu không có rủi ro phụ thuộc: Score = 0/5 = 0.00
+       - Ví dụ: Phát hiện 3 hợp đồng phụ thuộc chưa xác thực → Score = 3/5 = 0.60
+       - Ví dụ: Phát hiện 7 hợp đồng phụ thuộc chưa xác thực → Score = min(7,5)/5 = 1.00
+    
+    3. Lý do Trọng số (0.4 vs 0.6):
+       - Dependency Risk được gán trọng số cao hơn (0.6) vì:
+         * Trong môi trường Web3, rủi ro từ các hợp đồng bên thứ ba (third-party contracts)
+         * hoặc hợp đồng proxy thường gây ra tổn thất lớn hơn rủi ro nội tại
+         * của một hợp đồng đơn lẻ.
+         * Ví dụ điển hình: Các vụ hack lớn (Poly Network, Ronin Bridge) thường xảy ra
+         * do lỗ hổng trong hợp đồng phụ thuộc hoặc hợp đồng proxy, không phải hợp đồng chính.
+       - Internal Risk (0.4) vẫn quan trọng nhưng ít ảnh hưởng hơn trong trường hợp
+         hợp đồng được kiểm toán kỹ lưỡng, nhưng lại phụ thuộc vào các hợp đồng rủi ro.
+    
+    Ví dụ Tính toán (Kết quả mẫu):
+    ------------------------------
+    - Internal Risk: Không tìm thấy mã nguồn → Score = 0.50
+    - Dependency Risk: Không có hợp đồng phụ thuộc rủi ro → Score = 0.00
+    - Final Risk Score = (0.50 × 0.4) + (0.00 × 0.6) = 0.20 + 0.00 = 0.20
     """
     def __init__(self, db: BigQueryConnector):
         self.db = db
@@ -54,9 +93,10 @@ class ContractRiskAnalyzer:
             
             if not source_data or not source_data[0].get('SourceCode'):
                 print(f"[Pillar 1-OS] CẢNH BÁO: Không tìm thấy mã nguồn trên Etherscan.")
-                # Trả về kết quả trung thực cho báo cáo
+                # Trả về score = 50 (default) khi không tìm thấy source code
+                # Điều này phù hợp với logic trong run() sử dụng default 50
                 return {
-                    "score": 0, 
+                    "score": 50,  # Default score khi không tìm thấy source code
                     "issues_found": ["CRITICAL ERROR: Không thể lấy Source Code. Không thể đánh giá rủi ro nội bộ."]
                 }
             
@@ -190,23 +230,62 @@ class ContractRiskAnalyzer:
         print(f"[Pillar 1] Phân tích rủi ro phụ thuộc hoàn tất. Tìm thấy {len(hidden_risks)} rủi ro.")
         return hidden_risks
 
-    def run(self, contract_address: str) -> dict:
+    def run(self, contract_address: str, use_cache: bool = False, save_cache: bool = True) -> dict:
+        """
+        Chạy phân tích Pillar 1: Rủi ro Hợp đồng.
+        
+        Args:
+            contract_address: Địa chỉ hợp đồng cần phân tích
+            use_cache: Nếu True, sẽ đọc từ cache nếu có, không query lại
+            save_cache: Nếu True, sẽ lưu kết quả vào cache sau khi phân tích
+            
+        Returns:
+            Dictionary chứa kết quả phân tích rủi ro
+        """
+        # Import DataCache ở đây để tránh circular import
+        from analysis.data_cache import DataCache
+        
+        cache = DataCache()
+        
+        # Thử đọc từ cache nếu được yêu cầu
+        if use_cache:
+            cached_result = cache.load_pillar1(contract_address)
+            if cached_result is not None:
+                print("[Pillar 1] Đã sử dụng dữ liệu từ cache (không query BigQuery).")
+                return cached_result
+        
         print("\n--- Bắt đầu Phân tích Pillar 1: Rủi ro Hợp đồng ---")
         internal_risk = self._get_internal_risk(contract_address)
         dependency_graph = self._get_dependency_graph(contract_address)
         hidden_risks = self._analyze_hidden_risks(dependency_graph)
         
+        # Tính toán Internal Risk Score
+        # Nếu không có mã nguồn hoặc lỗi, score mặc định = 50 (tương đương 0.50 sau khi chia 100)
         internal_score = internal_risk.get('score', 50) / 100.0
+        
+        # Tính toán Dependency Risk Score
+        # Công thức: min(Số rủi ro, 5) / 5.0 để giới hạn điểm tối đa ở 1.0
         dependency_risk_count = len(hidden_risks)
         dependency_risk_score = min(dependency_risk_count, 5) / 5.0
+        
+        # Tính toán Final Risk Score với trọng số:
+        # Internal (0.4) + Dependency (0.6) = 1.0
+        # Xem docstring của class để hiểu lý do trọng số này.
         final_risk_score = (internal_score * 0.4) + (dependency_risk_score * 0.6)
         
         print(f" [Pillar 1] Hoàn tất. Điểm rủi ro nội bộ: {internal_score:.2f}, Điểm rủi ro phụ thuộc: {dependency_risk_score:.2f}")
         print(f" [Pillar 1] Điểm rủi ro cuối cùng (0.4*Internal + 0.6*Dependency): {final_risk_score:.2f}")
         
-        return {
+        result = {
             "final_risk_score": final_risk_score,
             "internal_risk": internal_risk,
             "dependency_risks": hidden_risks,
             "dependency_graph_nodes": list(dependency_graph.nodes())
         }
+        
+        # Lưu vào cache nếu được yêu cầu
+        if save_cache:
+            cache.save_pillar1(contract_address, result)
+        
+        return result
+

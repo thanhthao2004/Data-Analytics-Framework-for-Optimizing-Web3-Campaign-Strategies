@@ -1,0 +1,3 @@
+metric,value,type
+peak_activity_hour,11,hour
+sybil_clusters_count,0,count
